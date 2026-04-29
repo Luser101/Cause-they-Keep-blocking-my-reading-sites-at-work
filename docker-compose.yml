@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: pdf-library-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: pdf-library-hub
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - pdf-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: pdf-library-server
+    ports:
+      - "5000:5000"
+    environment:
+      MONGODB_URI: mongodb://admin:password@mongodb:27017/pdf-library-hub
+      PORT: 5000
+      NODE_ENV: production
+      JWT_SECRET: change-this-in-production
+      JWT_EXPIRE: 7d
+      MAX_FILE_SIZE: 50000000
+      UPLOAD_DIR: ./uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./server/uploads:/app/uploads
+    networks:
+      - pdf-network
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: pdf-library-client
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: http://localhost:5000/api
+    depends_on:
+      - server
+    networks:
+      - pdf-network
+
+volumes:
+  mongo_data:
+
+networks:
+  pdf-network:
+    driver: bridge
